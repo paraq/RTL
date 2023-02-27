@@ -1,0 +1,40 @@
+RTL:
+  default_args:
+    owner: "airflow"
+    start_date: "2023-02-01"
+    end_date: "2023-02-28"
+    max_active_runs: "1"
+  schedule_interval: "@daily"
+  tasks:
+    ecb_api:
+      operator: airflow.operators.python.PythonOperator
+      python_callable_file: /opt/airflow/scripts/staging.py
+      python_callable_name: staging
+      depends_on_past: "true"
+      op_kwargs:
+        url: "https://sdw-wsrest.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A"
+        start_date: "2023-02-01"
+        end_date: "{{ ds }}"
+    ingestion:
+      operator: airflow.operators.python.PythonOperator
+      python_callable_file: /opt/airflow/scripts/ingestion.py
+      python_callable_name: ingestion
+      depends_on_past: "true"
+      op_kwargs:
+        host: "192.168.48.4"
+        user: "user"
+        password: "password"
+      dependencies: [ecb_api]
+    unwrapper:
+      operator: airflow.operators.python.PythonOperator
+      python_callable_file: /opt/airflow/scripts/unwrapper.py
+      python_callable_name: unwrapper
+      depends_on_past: "true"
+      op_kwargs:
+        host: "192.168.48.4"
+        user: "user"
+        password: "password"
+        columns: ["value_recorded", "date_modify"]
+        data_types: ["FLOAT", "LONGTEXT"]
+        schema: ['$.dataSets[0].series.\"0:0:0:0:0\".observations.*[0]','$.structure.dimensions.observation[0].values[*].name']
+      dependencies: [ingestion]
